@@ -2,9 +2,8 @@ package datastore
 
 import (
 	"context"
+	"fmt"
 	"io"
-
-	"github.com/stellar/go/support/errors"
 )
 
 type DataStoreConfig struct {
@@ -25,32 +24,15 @@ type DataStore interface {
 	Close() error
 }
 
-// NewDataStore factory, it creates a new DataStore based on the config type
+// DefaultRegistry is the global datastore registry
+var DefaultRegistry = NewRegistry()
+
+// NewDataStore creates a new DataStore based on the config type
 func NewDataStore(ctx context.Context, datastoreConfig DataStoreConfig) (DataStore, error) {
-	switch datastoreConfig.Type {
-	case "GCS":
-		destinationBucketPath, ok := datastoreConfig.Params["destination_bucket_path"]
-		if !ok {
-			return nil, errors.Errorf("Invalid GCS config, no destination_bucket_path")
-		}
-		return NewGCSDataStore(ctx, destinationBucketPath, datastoreConfig.Schema)
-	case "GCS_OAUTH":
-		destinationBucketPath, ok := datastoreConfig.Params["destination_bucket_path"]
-		if !ok {
-			return nil, errors.Errorf("Invalid GCS config, no destination_bucket_path")
-		}
-		accessToken, ok := datastoreConfig.Params["access_token"]
-		if !ok {
-			return nil, errors.Errorf("Invalid GCS config, no access_token")
-		}
-		return NewGCSDataStoreWithOAuth(ctx, destinationBucketPath, datastoreConfig.Schema, accessToken)
-	case "FS":
-		basePath, ok := datastoreConfig.Params["base_path"]
-		if !ok {
-			return nil, errors.Errorf("Invalid FS config, no base_path")
-		}
-		return NewFSDataStore(basePath, datastoreConfig.Schema)
-	default:
-		return nil, errors.Errorf("Invalid datastore type %v, not supported", datastoreConfig.Type)
+	provider, exists := DefaultRegistry.Get(datastoreConfig.Type)
+	if !exists {
+		return nil, fmt.Errorf("unsupported datastore type: %s", datastoreConfig.Type)
 	}
+
+	return provider(ctx, datastoreConfig.Params, datastoreConfig.Schema)
 }
