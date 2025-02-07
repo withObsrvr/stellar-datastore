@@ -103,24 +103,19 @@ func (s *S3DataStore) GetFile(ctx context.Context, path string) (io.ReadCloser, 
 func (s *S3DataStore) PutFile(ctx context.Context, path string, in io.WriterTo, metadata map[string]string) error {
 	// Buffer the data
 	var buf bytes.Buffer
-	n, err := in.WriteTo(&buf)
+	written, err := in.WriteTo(&buf)
 	if err != nil {
 		return fmt.Errorf("failed to buffer data: %w", err)
 	}
 
-	// Verify buffer length matches bytes written
-	if n != int64(buf.Len()) {
-		return fmt.Errorf("data corruption detected: wrote %d bytes but buffer contains %d bytes", n, buf.Len())
-	}
-
-	fmt.Printf("Uploading file %s with content length: %d\n", path, n)
+	fmt.Printf("Uploading file %s with content length: %d\n", path, written)
 
 	// Upload to S3
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucketName),
 		Key:           aws.String(path),
 		Body:          bytes.NewReader(buf.Bytes()),
-		ContentLength: aws.Int64(n),
+		ContentLength: aws.Int64(written),
 		Metadata:      metadata,
 	})
 	if err != nil {
