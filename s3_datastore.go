@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -100,21 +101,20 @@ func (s *S3DataStore) GetFile(ctx context.Context, path string) (io.ReadCloser, 
 }
 
 func (s *S3DataStore) PutFile(ctx context.Context, path string, in io.WriterTo, metadata map[string]string) error {
-	// Create a pipe to stream the data
-	pr, pw := io.Pipe()
+	// Buffer the data to calculate content length
+	var buf bytes.Buffer
+	_, err := in.WriteTo(&buf)
+	if err != nil {
+		return fmt.Errorf("failed to buffer data: %w", err)
+	}
 
-	// Start a goroutine to write the data to the pipe
-	go func() {
-		_, err := in.WriteTo(pw)
-		pw.CloseWithError(err)
-	}()
-
-	// Upload to S3
-	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:   aws.String(s.bucketName),
-		Key:      aws.String(path),
-		Body:     pr,
-		Metadata: metadata,
+	// Upload to S3 with known content length
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucketName),
+		Key:           aws.String(path),
+		Body:          bytes.NewReader(buf.Bytes()),
+		ContentLength: aws.Int64(int64(buf.Len())),
+		Metadata:      metadata,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upload to S3: %w", err)
