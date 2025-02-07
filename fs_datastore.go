@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // FSDataStore implements DataStore for local filesystem
@@ -123,4 +124,37 @@ func (f *FSDataStore) GetSchema() DataStoreSchema {
 
 func (f *FSDataStore) Close() error {
 	return nil
+}
+
+func (f *FSDataStore) ListObjectsInRange(ctx context.Context, startSeq, endSeq uint32) ([]string, error) {
+	startKey := f.schema.GetObjectKeyFromSequenceNumber(startSeq)
+	endKey := f.schema.GetObjectKeyFromSequenceNumber(endSeq)
+	baseDir := filepath.Dir(filepath.Join(f.basePath, startKey))
+
+	var objects []string
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(f.basePath, path)
+		if err != nil {
+			return err
+		}
+
+		if relPath >= startKey && relPath <= endKey {
+			objects = append(objects, relPath)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list objects: %w", err)
+	}
+
+	sort.Sort(sort.Reverse(sort.StringSlice(objects)))
+	return objects, nil
 }

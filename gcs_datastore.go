@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/iterator"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
@@ -201,4 +203,31 @@ func (b GCSDataStore) putFile(ctx context.Context, filePath string, in io.Writer
 // and organization of data in the datastore.
 func (b GCSDataStore) GetSchema() DataStoreSchema {
 	return b.schema
+}
+
+func (b GCSDataStore) ListObjectsInRange(ctx context.Context, startSeq, endSeq uint32) ([]string, error) {
+	startKey := b.schema.GetObjectKeyFromSequenceNumber(startSeq)
+	endKey := b.schema.GetObjectKeyFromSequenceNumber(endSeq)
+
+	var objects []string
+	it := b.bucket.Objects(ctx, &storage.Query{
+		Prefix: strings.Split(startKey, "/")[0],
+	})
+
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects: %w", err)
+		}
+
+		if attrs.Name >= startKey && attrs.Name <= endKey {
+			objects = append(objects, attrs.Name)
+		}
+	}
+
+	sort.Sort(sort.Reverse(sort.StringSlice(objects)))
+	return objects, nil
 }

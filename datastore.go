@@ -22,6 +22,7 @@ type DataStore interface {
 	Size(ctx context.Context, path string) (int64, error)
 	GetSchema() DataStoreSchema
 	Close() error
+	ListObjectsInRange(ctx context.Context, startSeq, endSeq uint32) ([]string, error)
 }
 
 // DefaultRegistry is the global datastore registry

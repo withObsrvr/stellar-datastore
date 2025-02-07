@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -181,4 +182,37 @@ func (s *S3DataStore) GetSchema() DataStoreSchema {
 
 func (s *S3DataStore) Close() error {
 	return nil
+}
+
+// ListObjectsInRange lists objects within a given ledger range in descending order
+// Returns nil, nil if not supported by the backend
+func (s *S3DataStore) ListObjectsInRange(ctx context.Context, startSeq, endSeq uint32) ([]string, error) {
+	// Get the prefix for this range
+	startKey := s.schema.GetObjectKeyFromSequenceNumber(startSeq)
+	endKey := s.schema.GetObjectKeyFromSequenceNumber(endSeq)
+
+	input := &s3.ListObjectsV2Input{
+		Bucket: aws.String(s.bucketName),
+		Prefix: aws.String(strings.Split(startKey, "/")[0]), // Get partition prefix
+	}
+
+	var objects []string
+	paginator := s3.NewListObjectsV2Paginator(s.client, input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects: %w", err)
+		}
+
+		for _, obj := range output.Contents {
+			key := aws.ToString(obj.Key)
+			if key >= startKey && key <= endKey {
+				objects = append(objects, key)
+			}
+		}
+	}
+
+	// Sort in descending order
+	sort.Sort(sort.Reverse(sort.StringSlice(objects)))
+	return objects, nil
 }

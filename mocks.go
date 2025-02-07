@@ -56,6 +56,11 @@ func (m *MockDataStore) GetSchema() DataStoreSchema {
 	return args.Get(0).(DataStoreSchema)
 }
 
+func (m *MockDataStore) ListObjectsInRange(ctx context.Context, startSeq, endSeq uint32) ([]string, error) {
+	args := m.Called(ctx, startSeq, endSeq)
+	return args.Get(0).([]string), args.Error(1)
+}
+
 type MockResumableManager struct {
 	mock.Mock
 }

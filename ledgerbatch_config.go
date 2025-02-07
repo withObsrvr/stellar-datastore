@@ -3,6 +3,8 @@ package datastore
 import (
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/stellar/go/support/compressxdr"
 )
@@ -46,4 +48,22 @@ func (ec DataStoreSchema) GetObjectKeyFromSequenceNumber(ledgerSeq uint32) strin
 	objectKey += fmt.Sprintf(".xdr.%s", compressxdr.DefaultCompressor.Name())
 
 	return objectKey
+}
+
+// GetSequenceNumberFromObjectKey extracts the sequence number from an object key
+func (ec DataStoreSchema) GetSequenceNumberFromObjectKey(key string) (uint32, error) {
+	// Extract sequence number from format like "FFFFFFFF--0-63.xdr.zstd" or "FFFFFFFF--0-639/FFFFFFFF--0-63.xdr.zstd"
+	parts := strings.Split(key, "--")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("invalid object key format: %s", key)
+	}
+
+	seqParts := strings.Split(parts[1], ".")
+	rangeParts := strings.Split(seqParts[0], "-")
+	seq, err := strconv.ParseUint(rangeParts[0], 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid sequence number in key: %w", err)
+	}
+
+	return uint32(seq), nil
 }

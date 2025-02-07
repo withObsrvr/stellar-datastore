@@ -59,6 +59,29 @@ func (rm resumableManagerService) FindStart(ctx context.Context, start, end uint
 
 	log.WithField("start", start).WithField("end", end)
 
+	// Try listing objects first if supported
+	if objects, err := rm.dataStore.ListObjectsInRange(ctx, start, end); err != nil {
+		return 0, false, err
+	} else if objects != nil {
+		// Listing is supported
+		if len(objects) == 0 {
+			return start, true, nil // No objects found, start from beginning
+		}
+
+		// Get the sequence number from the most recent object
+		lastSeq, err := rm.ledgerBatchConfig.GetSequenceNumberFromObjectKey(objects[0])
+		if err != nil {
+			return 0, false, err
+		}
+
+		nextSeq := lastSeq + rm.ledgerBatchConfig.LedgersPerFile
+		if nextSeq <= end {
+			return nextSeq, true, nil
+		}
+		return 0, false, nil // All ledgers present
+	}
+
+	// Fall back to binary search if listing not supported
 	networkLatest := uint32(0)
 	if end < 1 {
 		var latestErr error
