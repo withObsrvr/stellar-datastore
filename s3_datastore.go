@@ -101,21 +101,24 @@ func (s *S3DataStore) GetFile(ctx context.Context, path string) (io.ReadCloser, 
 }
 
 func (s *S3DataStore) PutFile(ctx context.Context, path string, in io.WriterTo, metadata map[string]string) error {
-	// Buffer the data
+	// First get the exact size by writing to a buffer
 	var buf bytes.Buffer
-	written, err := in.WriteTo(&buf)
+	size, err := in.WriteTo(&buf)
 	if err != nil {
 		return fmt.Errorf("failed to buffer data: %w", err)
 	}
 
-	fmt.Printf("Uploading file %s with content length: %d\n", path, written)
+	// Create a new reader from the buffer
+	reader := bytes.NewReader(buf.Bytes())
 
-	// Upload to S3
+	fmt.Printf("Uploading file %s with content length: %d\n", path, size)
+
+	// Upload to S3 using the reader
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucketName),
 		Key:           aws.String(path),
-		Body:          bytes.NewReader(buf.Bytes()),
-		ContentLength: aws.Int64(written),
+		Body:          reader,
+		ContentLength: aws.Int64(int64(reader.Size())), // Use reader.Size() for exact length
 		Metadata:      metadata,
 	})
 	if err != nil {
